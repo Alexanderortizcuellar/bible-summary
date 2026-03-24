@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Βιβλική Αφήγηση</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            background-color: #fdf6e3;
+            color: #333;
+            font-family: "Georgia", serif;
+        }
+
+        #parsed-text {
+            line-height: 1.7;
+            padding: 2rem;
+            max-width: 800px;
+            margin: auto;
+        }
+
+        #parsed-text h1 {
+            text-align: center;
+            color: #2a4d69;
+            font-size: 2.2rem;
+            margin-bottom: 1.5rem;
+            font-weight: bold;
+        }
+
+        #parsed-text p {
+            margin-bottom: 1.2rem;
+            text-indent: 1.5rem;
+            font-size: 1.1rem;
+        }
+
+        #parsed-text .highlight {
+            background-color: #fff3cd;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+        }
+
+        #parsed-text blockquote {
+            border-left: 4px solid #ff6f61;
+            margin: 1.5rem 0;
+            padding: 1rem 1rem 1rem 1.5rem;
+            color: #555;
+            font-style: italic;
+            background-color: #fff8f0;
+            border-radius: 0 8px 8px 0;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <nav class="bg-white/95 backdrop-blur shadow-md p-4 sticky top-0 border-b border-gray-200 z-10" style="font-family: sans-serif;">
+        <div class="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            
+            <div class="flex items-center gap-2 text-[#2a4d69]">
+                <i class="fa-solid fa-book-bible text-xl"></i>
+                <h1 class="text-lg font-bold tracking-wide hidden md:block">Αφήγηση</h1>
+            </div>
+
+            <div class="flex items-center gap-3 w-full md:w-auto justify-center">
+                
+                <div class="relative w-40 md:w-48">
+                    <select id="book-select" onchange="onBookChange()" 
+                        class="w-full appearance-none bg-gray-50 border border-gray-300 text-gray-700 py-2 pl-4 pr-10 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2a4d69] focus:border-transparent transition-all cursor-pointer text-sm md:text-base font-medium">
+                        <option value="">Φόρτωση...</option>
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                    </div>
+                </div>
+                
+                <div class="relative w-32 md:w-40">
+                    <select id="chapter-select" onchange="onChapterChange()" 
+                        class="w-full appearance-none bg-gray-50 border border-gray-300 text-gray-700 py-2 pl-4 pr-10 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-[#2a4d69] focus:border-transparent transition-all cursor-pointer text-sm md:text-base font-medium">
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="flex gap-2 w-full md:w-auto justify-center">
+                <button id="prev-btn" onclick="navigate(-1)" 
+                    class="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg shadow-sm hover:bg-gray-50 hover:text-[#2a4d69] focus:outline-none focus:ring-2 focus:ring-[#2a4d69] transition-all font-medium text-sm md:text-base w-full md:w-auto">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span>Πίσω</span>
+                </button>
+                <button id="next-btn" onclick="navigate(1)" 
+                    class="flex items-center justify-center gap-2 px-4 py-2 bg-[#2a4d69] text-white rounded-lg shadow-md hover:bg-[#1f3a50] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#2a4d69] transition-all font-medium text-sm md:text-base w-full md:w-auto">
+                    <span>Εμπρός</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow">
+        <div id="loading" class="flex flex-col items-center justify-center text-[#2a4d69] py-20" style="font-family: sans-serif;">
+            <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-4"></i>
+            <p class="font-medium">Φόρτωση δεδομένων...</p>
+        </div>
+        
+        <div id="parsed-text" class="fade-in"></div>
+    </main>
+
+    <script>
+        // ==========================================
+        // CONFIGURATION
+        // ==========================================
+        const BASE_URL = "https://alexanderortizcuellar.github.io/bible-summary/bible"; 
+        
+        let booksData = [];
+        let currentBookIndex = null;
+        let currentChapter = 1;
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+        document.addEventListener("DOMContentLoaded", async () => {
+            await loadBooksData();
+        });
+
+        async function loadBooksData() {
+            try {
+                const response = await fetch(`${BASE_URL}/books.json`);
+                if (!response.ok) throw new Error("Could not load books.json");
+                
+                booksData = await response.json();
+                
+                if (booksData.length > 0) {
+                    populateBookDropdown();
+                    currentBookIndex = booksData[0].index;
+                    currentChapter = 1;
+                    
+                    updateChapterDropdown();
+                    fetchAndParseChapter();
+                } else {
+                    document.getElementById("parsed-text").innerHTML = `
+                        <div class="text-center py-10" style="font-family: sans-serif;">
+                            <i class="fa-solid fa-folder-open text-4xl text-gray-400 mb-3"></i>
+                            <p class="text-gray-600">Δεν βρέθηκαν βιβλία (No books found).</p>
+                        </div>`;
+                }
+            } catch (error) {
+                console.error("Error loading JSON:", error);
+                document.getElementById("loading").innerHTML = `
+                    <div class="text-center text-red-500">
+                        <i class="fa-solid fa-triangle-exclamation text-3xl mb-2"></i>
+                        <p>Σφάλμα φόρτωσης βιβλίων (Error loading books.json).</p>
+                    </div>`;
+            }
+        }
+
+        // ==========================================
+        // UI UPDATES
+        // ==========================================
+        function populateBookDropdown() {
+            const bookSelect = document.getElementById("book-select");
+            bookSelect.innerHTML = "";
+            
+            booksData.forEach(book => {
+                const option = document.createElement("option");
+                option.value = book.index;
+                option.textContent = book.name;
+                bookSelect.appendChild(option);
+            });
+        }
+
+        function updateChapterDropdown() {
+            const chapterSelect = document.getElementById("chapter-select");
+            chapterSelect.innerHTML = "";
+            
+            const currentBookObj = booksData.find(b => b.index == currentBookIndex);
+            if (!currentBookObj) return;
+
+            for (let i = 1; i <= currentBookObj.chapters; i++) {
+                const option = document.createElement("option");
+                option.value = i;
+                option.textContent = `Κεφ. ${i}`;
+                if (i === currentChapter) option.selected = true;
+                chapterSelect.appendChild(option);
+            }
+        }
+
+        function updateNavigationButtons() {
+            const prevBtn = document.getElementById("prev-btn");
+            const nextBtn = document.getElementById("next-btn");
+            const bookArrayIndex = booksData.findIndex(b => b.index == currentBookIndex);
+            const currentBookObj = booksData[bookArrayIndex];
+
+            // Prev Button State
+            if (bookArrayIndex === 0 && currentChapter === 1) {
+                prevBtn.disabled = true;
+                prevBtn.classList.add("opacity-40", "cursor-not-allowed", "bg-gray-100");
+                prevBtn.classList.remove("hover:bg-gray-50", "hover:text-[#2a4d69]");
+            } else {
+                prevBtn.disabled = false;
+                prevBtn.classList.remove("opacity-40", "cursor-not-allowed", "bg-gray-100");
+                prevBtn.classList.add("hover:bg-gray-50", "hover:text-[#2a4d69]");
+            }
+
+            // Next Button State
+            if (bookArrayIndex === booksData.length - 1 && currentChapter === currentBookObj.chapters) {
+                nextBtn.disabled = true;
+                nextBtn.classList.add("opacity-50", "cursor-not-allowed");
+                nextBtn.classList.remove("hover:bg-[#1f3a50]");
+            } else {
+                nextBtn.disabled = false;
+                nextBtn.classList.remove("opacity-50", "cursor-not-allowed");
+                nextBtn.classList.add("hover:bg-[#1f3a50]");
+            }
+        }
+
+        // ==========================================
+        // EVENT HANDLERS
+        // ==========================================
+        function onBookChange() {
+            currentBookIndex = parseInt(document.getElementById("book-select").value);
+            currentChapter = 1; 
+            updateChapterDropdown();
+            fetchAndParseChapter();
+        }
+
+        function onChapterChange() {
+            currentChapter = parseInt(document.getElementById("chapter-select").value);
+            fetchAndParseChapter();
+        }
+
+        function navigate(direction) {
+            const bookArrayIndex = booksData.findIndex(b => b.index == currentBookIndex);
+            const currentBookObj = booksData[bookArrayIndex];
+
+            if (direction === 1) { // Next
+                if (currentChapter < currentBookObj.chapters) {
+                    currentChapter++;
+                } else if (bookArrayIndex < booksData.length - 1) {
+                    currentBookIndex = booksData[bookArrayIndex + 1].index;
+                    currentChapter = 1;
+                } else return;
+            } else if (direction === -1) { // Prev
+                if (currentChapter > 1) {
+                    currentChapter--;
+                } else if (bookArrayIndex > 0) {
+                    currentBookIndex = booksData[bookArrayIndex - 1].index;
+                    currentChapter = booksData[bookArrayIndex - 1].chapters;
+                } else return;
+            }
+
+            document.getElementById("book-select").value = currentBookIndex;
+            updateChapterDropdown();
+            document.getElementById("chapter-select").value = currentChapter;
+            
+            fetchAndParseChapter();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // ==========================================
+        // DATA FETCHING & PARSING
+        // ==========================================
+        async function fetchAndParseChapter() {
+            const loadingEl = document.getElementById("loading");
+            const contentEl = document.getElementById("parsed-text");
+            
+            loadingEl.style.display = "flex";
+            contentEl.style.display = "none";
+            contentEl.innerHTML = "";
+            updateNavigationButtons();
+
+            const targetUrl = `${BASE_URL}/${currentBookIndex}/${currentChapter}.txt`;
+
+            try {
+                const response = await fetch(targetUrl);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const rawText = await response.text();
+                contentEl.innerHTML = parseTextToHtml(rawText);
+            } catch (error) {
+                console.error("Fetch error:", error);
+                contentEl.innerHTML = `
+                    <div style="text-align: center; font-family: sans-serif; padding: 3rem;">
+                        <i class="fa-solid fa-file-circle-xmark text-5xl text-[#ff6f61] mb-4"></i>
+                        <p style="color: #ff6f61; font-weight: bold; font-size: 1.2rem;">Σφάλμα φόρτωσης</p>
+                        <p style="color: #666; font-size: 0.95rem; margin-top: 0.5rem;">Δεν βρέθηκε το αρχείο: ${currentBookIndex}/${currentChapter}.txt</p>
+                    </div>
+                `;
+            } finally {
+                loadingEl.style.display = "none";
+                contentEl.style.display = "block";
+            }
+        }
+
+        function parseTextToHtml(text) {
+            const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length > 0);
+            if (lines.length === 0) return "<p>Empty chapter.</p>";
+
+            let html = "";
+            const title = lines[0];
+            html += `<h1>${title}</h1>`;
+
+            for (let i = 1; i < lines.length; i++) {
+                let line = lines[i];
+
+                line = line.replace(/==([^=]+)==/g, '<span class="highlight">$1</span>');
+
+                if (line.startsWith(">")) {
+                    html += `<blockquote>${line.substring(1).trim()}</blockquote>`;
+                } else {
+                    html += `<p>${line}</p>`;
+                }
+            }
+            return html;
+        }
+    </script>
+</body>
+</html>
+
